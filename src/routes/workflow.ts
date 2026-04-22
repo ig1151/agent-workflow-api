@@ -7,10 +7,10 @@ import { logger } from '../logger';
 const router = Router();
 
 const schema = Joi.object({
-  goal: Joi.string().min(5).max(500).required(),
+  goal: Joi.string().max(500).optional(),
+  workflow: Joi.string().valid('find_and_enrich_leads', 'research_and_summarize', 'extract_and_structure', 'competitive_intelligence', 'market_research').optional(),
   input: Joi.object().default({}),
-  template: Joi.string().optional(),
-});
+}).or('goal', 'workflow');
 
 router.post('/workflow/run', async (req: Request, res: Response) => {
   const { error, value } = schema.validate(req.body);
@@ -19,15 +19,16 @@ router.post('/workflow/run', async (req: Request, res: Response) => {
     return;
   }
 
-  logger.info({ goal: value.goal }, 'Workflow started');
+  const goal = value.goal ?? value.workflow;
+  logger.info({ goal, workflow: value.workflow }, 'Workflow started');
 
   try {
-    const result = await runWorkflow(value.goal, value.input ?? {});
-    logger.info({ goal: value.goal, status: result.status, latency_ms: result.latency_ms }, 'Workflow complete');
+    const result = await runWorkflow(goal, value.input ?? {}, value.workflow);
+    logger.info({ goal, status: result.status, latency_ms: result.latency_ms }, 'Workflow complete');
     res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Workflow failed';
-    logger.error({ goal: value.goal, err }, 'Workflow failed');
+    logger.error({ goal, err }, 'Workflow failed');
     res.status(500).json({ error: 'Workflow failed', details: message });
   }
 });
