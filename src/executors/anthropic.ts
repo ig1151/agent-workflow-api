@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger';
+import { logger } from '../logger';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'anthropic/claude-sonnet-4-5';
@@ -27,8 +27,8 @@ async function callOpenRouter(input: string | { role: string; content: string }[
     throw new Error(`Request failed with status code ${response.status}`);
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content as string;
+  const data = await response.json() as { choices: { message: { content: string } }[] };
+  return data.choices[0].message.content;
 }
 
 export async function callClaude(input: string | { role: string; content: string }[]): Promise<string> {
