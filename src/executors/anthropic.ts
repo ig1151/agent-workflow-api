@@ -1,34 +1,46 @@
-import axios from 'axios';
+import { logger } from '../utils/logger';
 
-export async function callClaude(prompt: string, maxTokens = 2000): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MODEL = 'anthropic/claude-sonnet-4-5';
 
-  const res = await axios.post(
-    'https://api.anthropic.com/v1/messages',
-    {
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
+async function callOpenRouter(input: string | { role: string; content: string }[], json = false): Promise<string> {
+  const messages = typeof input === 'string'
+    ? [{ role: 'user', content: input }]
+    : input;
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
     },
-    {
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      timeout: 30000,
-    }
-  );
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      ...(json && { response_format: { type: 'json_object' } }),
+    }),
+  });
 
-  return res.data.content[0]?.text ?? '';
+  if (!response.ok) {
+    const err = await response.text();
+    logger.error({ status: response.status, err }, 'OpenRouter error');
+    throw new Error(`Request failed with status code ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content as string;
 }
 
-export async function callClaudeJSON(prompt: string, maxTokens = 2000): Promise<unknown> {
-  const text = await callClaude(prompt + '\n\nReturn only valid JSON, no markdown.', maxTokens);
+export async function callClaude(input: string | { role: string; content: string }[]): Promise<string> {
+  return callOpenRouter(input, false);
+}
+
+export async function callClaudeJSON(input: string | { role: string; content: string }[]): Promise<unknown> {
+  const text = await callOpenRouter(input, true);
   try {
     return JSON.parse(text.replace(/```json|```/g, '').trim());
   } catch {
+    logger.error({ text }, 'Failed to parse JSON response');
     return null;
   }
 }
